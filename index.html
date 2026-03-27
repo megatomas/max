@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Моё Mini App в MAX</title>
+  <script src="https://st.max.ru/js/max-web-app.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; text-align: center; }
+    #userId { font-size: 18px; font-weight: bold; color: #0066ff; }
+  </style>
+</head>
+<body>
+  <h1>Привет из Mini App MAX!</h1>
+  <p>Твой ID пользователя:</p>
+  <div id="userId">Загрузка...</div>
+
+  <script>
+    // Инициализация MAX Bridge
+    WebApp.ready();
+
+    // Получаем данные пользователя и стартовый параметр
+    const initData = WebApp.initDataUnsafe;
+
+    const user = initData.user;
+    const startParam = initData.start_param;   // сюда бот передаст user_id
+
+    let userId = 'Не удалось получить';
+
+    if (user && user.id) {
+      userId = user.id;
+    } else if (startParam) {
+      // Если бот передал через startapp
+      userId = startParam;
+    }
+
+    document.getElementById('userId').textContent = userId;
+
+    console.log('Данные из MAX:', initData);
+    console.log('ID пользователя:', userId);
+
+    // Пример: кнопка закрытия мини-приложения
+    WebApp.BackButton.show();
+    WebApp.BackButton.onClick(() => WebApp.close());
+  </script>
+</body>
+</html>
