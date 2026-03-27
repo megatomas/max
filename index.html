@@ -2,46 +2,203 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Моё Mini App в MAX</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Заявка на замену счётчика</title>
+
+  <!-- MAX Bridge -->
   <script src="https://st.max.ru/js/max-web-app.js"></script>
+
+  <!-- Bootstrap + твои стили -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { font-family: sans-serif; padding: 20px; text-align: center; }
-    #userId { font-size: 18px; font-weight: bold; color: #0066ff; }
+    body {
+      background: #f8f9fa;
+      font-family: sans-serif;
+      padding-bottom: 20px;
+    }
+    .balance-header {
+      background: linear-gradient(to right, #5B8E7D, #1a4341);
+      color: white;
+      padding: 18px 15px;
+      text-align: center;
+      font-size: 1.4em;
+      margin-bottom: 15px;
+      border-radius: 10px;
+    }
+    .container { max-width: 100%; padding: 0 15px; }
+    input.form-control, textarea.form-control, select.form-select {
+      font-size: 16px !important;
+      padding: 14px 16px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+    .btn {
+      padding: 16px 20px;
+      font-size: 17px;
+      border-radius: 50px;
+      font-weight: 500;
+    }
+    .btn-success { background-color: #5B8E7D; border: none; }
+    .placeholder {
+      text-align: center;
+      padding: 40px 20px;
+      color: #666;
+    }
+    .error { color: red; }
   </style>
 </head>
 <body>
-  <h1>Привет из Mini App MAX!</h1>
-  <p>Твой ID пользователя:</p>
-  <div id="userId">Загрузка...</div>
+
+  <div id="content">
+    <!-- Здесь будет либо заглушка, либо форма -->
+    <div class="text-center mt-5">
+      <div class="spinner-border text-primary" role="status"></div>
+      <p class="mt-3">Проверка доступа...</p>
+    </div>
+  </div>
 
   <script>
-    // Инициализация MAX Bridge
+    // Инициализация MAX WebApp
     WebApp.ready();
+    WebApp.expand();
 
-    // Получаем данные пользователя и стартовый параметр
     const initData = WebApp.initDataUnsafe;
+    let userId = null;
 
-    const user = initData.user;
-    const startParam = initData.start_param;   // сюда бот передаст user_id
-
-    let userId = 'Не удалось получить';
-
-    if (user && user.id) {
-      userId = user.id;
-    } else if (startParam) {
-      // Если бот передал через startapp
-      userId = startParam;
+    if (initData.user && initData.user.id) {
+      userId = initData.user.id;
+    } else if (initData.start_param) {
+      userId = initData.start_param;   // на случай передачи через startapp
     }
 
-    document.getElementById('userId').textContent = userId;
+    if (!userId) {
+      document.getElementById('content').innerHTML = `
+        <div class="placeholder">
+          <h3>Ошибка</h3>
+          <p>Не удалось получить ID пользователя.</p>
+          <button class="btn btn-outline-secondary" onclick="WebApp.close()">Закрыть</button>
+        </div>`;
+      throw new Error("No user ID");
+    }
 
-    console.log('Данные из MAX:', initData);
-    console.log('ID пользователя:', userId);
+    // === Проверяем наличие пользователя в твоей БД ===
+    fetch('/check_user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId })
+    })
+    .then(res => res.json())
+    .then(data => {
+      const contentDiv = document.getElementById('content');
 
-    // Пример: кнопка закрытия мини-приложения
-    WebApp.BackButton.show();
-    WebApp.BackButton.onClick(() => WebApp.close());
+      if (!data.exists) {
+        // ==================== ЗАГЛУШКА ====================
+        contentDiv.innerHTML = `
+          <div class="placeholder">
+            <h3>Доступ закрыт</h3>
+            <p>Ваша учётная запись ещё не активирована.</p>
+            <p>Обратитесь к администратору или дождитесь подтверждения.</p>
+            <button class="btn btn-success mt-3" onclick="WebApp.close()">Закрыть приложение</button>
+          </div>`;
+      }
+      else {
+        // ==================== ФОРМА ЗАЯВКИ ====================
+        contentDiv.innerHTML = `
+          <div class="balance-header">
+            <strong>Баланс:</strong> ${data.balance ? data.balance.toFixed(2) : '0.00'} ₽<br>
+            <small>${data.name || data.phone || 'Пользователь'}</small>
+          </div>
+
+          <div class="container">
+            <form method="POST" action="/form" enctype="multipart/form-data">
+
+              <div class="mb-3">
+                <label>Клиент (ФИО)</label>
+                <input type="text" name="fullname" class="form-control" placeholder="Введите ФИО клиента" required>
+              </div>
+
+              <div class="mb-3">
+                <label>Адрес</label>
+                <textarea name="address" class="form-control" placeholder="Полный адрес" rows="3" required></textarea>
+              </div>
+
+              <div class="mb-3">
+                <label>Контактный телефон</label>
+                <input type="tel" name="phone" class="form-control" placeholder="+7" value="+7" required>
+              </div>
+
+              <div class="mb-3">
+                <label>Тип счётчика</label>
+                <select name="type" class="form-select">
+                  <option value="hot_water">Горячая вода (ГВС)</option>
+                  <option value="cold_water">Холодная вода (ХВС)</option>
+                </select>
+              </div>
+
+              <div class="mb-3">
+                <label>Модель счётчика</label>
+                <select id="model" name="model" class="form-select">
+                  <option value="">Выберите модификацию</option>
+                  <option value="СГВ-15">СГВ-15</option>
+                  <option value="СВКМ-15">СВКМ-15</option>
+                  <option value="СВК-15-3-2">СВК-15-3-2</option>
+                  <option value="VLF-U">VLF-U</option>
+                  <option value="СВК-15">СВК-15</option>
+                  <option value="ВСКМ 90-15">ВСКМ 90-15</option>
+                  <option value="СВ-15">СВ-15</option>
+                  <option value="СВУ-15">СВУ-15</option>
+                  <option value="VLF-R">VLF-R</option>
+                  <option value="СВК-15-1,5">СВК-15-1,5</option>
+                  <option value="other">Другая</option>
+                </select>
+                <input type="text" id="other_model" name="other_model" class="form-control mt-2" placeholder="Введите модель вручную" style="display:none;">
+              </div>
+
+              <div class="mb-3">
+                <label>Заводской номер</label>
+                <input type="text" name="serial" class="form-control" placeholder="Заводской номер" required>
+              </div>
+
+              <div class="mb-3">
+                <label>Год выпуска</label>
+                <input type="text" name="year" class="form-control" placeholder="Год выпуска" required>
+              </div>
+
+              <div class="mb-3">
+                <label>Текущие показания</label>
+                <input type="text" name="reading" class="form-control" placeholder="Показания" required>
+              </div>
+
+              <div id="error" class="text-danger mb-3"></div>
+
+              <div class="button-group d-flex gap-3">
+                <button type="submit" class="btn btn-success flex-fill">Отправить заявку</button>
+                <button type="button" id="cancelBtn" class="btn btn-outline-secondary flex-fill">Отмена</button>
+              </div>
+            </form>
+          </div>`;
+
+        // Обработчики для формы
+        document.getElementById("model").addEventListener("change", function() {
+          const other = document.getElementById("other_model");
+          other.style.display = (this.value === "other") ? "block" : "none";
+        });
+
+        document.getElementById("cancelBtn").addEventListener("click", () => {
+          if (confirm("Отменить заполнение заявки?")) {
+            WebApp.close();
+          }
+        });
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      document.getElementById('content').innerHTML = `
+        <div class="placeholder">
+          <h3>Ошибка соединения</h3>
+          <p>Не удалось проверить доступ. Попробуйте позже.</p>
+        </div>`;
+    });
   </script>
 </body>
 </html>
